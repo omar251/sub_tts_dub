@@ -1,0 +1,24 @@
+[project]
+name = "sub_tts_dub"
+version = "0.1.0"
+description = "read subtitles and dub them"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "babelfish>=0.6.1",
+    "beautifulsoup4>=4.13.5",
+    "gtts>=2.5.4",
+    "keyboard>=0.13.5",
+    "langdetect>=1.0.9",
+    "mpv>=1.0.8",
+    "pygame>=2.6.1",
+    "pynput>=1.8.1",
+    "pysrt>=1.1.2",
+    "python-vlc>=3.0.21203",
+    "pyttsx3>=2.99",
+    "requests>=2.32.5",
+    "subliminal>=2.4.0",
+]
+
+[tool.uv.workspace]
+members = ["sub_tts_dub"]
