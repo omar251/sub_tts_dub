@@ -54,15 +54,31 @@ You can also specify a path to a different subtitle file.
 python dub.py "path/to/movie.mp4" --subs "path/to/different_subtitles.srt"
 ```
 
+### TTS Engine Options
+
+You can choose between Google TTS and Edge TTS, which offers a wider variety of voices.
+
+```bash
+# Use Edge TTS with a specific voice
+python dub.py "movie.mp4" --tts-engine edge --voice "en-US-ChristopherNeural"
+
+# List all available Edge TTS voices
+python dub.py --list-voices
+```
+
+### Other Options
+
 ```bash
 # Pre-cache all TTS audio (slower startup, instant seeking)
 python dub.py "movie.mp4" --precache
 
-# Adjust voice speed (0.5 = slower, 2.0 = faster)
-python dub.py "movie.mp4" --speed 1.5
+# Adjust voice speed (e.g., 1.5 for 1.5x speed)
+# For Google TTS, the range is 0.5 to 2.0.
+# For Edge TTS, this is a percentage offset (e.g., 1.2 = +20%, 0.9 = -10%).
+python dub.py "movie.mp4" --speed 1.2
 
 # Combine options
-python dub.py "movie.mp4" --subs "subs.srt" --precache --speed 0.8
+python dub.py "movie.mp4" --subs "subs.srt" --precache --speed 0.8 --tts-engine edge --voice "fr-FR-HenriNeural"
 ```
 
 ## Playback Modes

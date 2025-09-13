@@ -11,6 +11,8 @@ import re
 import unicodedata
 import readchar
 import pygame
+import asyncio
+import edge_tts
 from gtts import gTTS
 from langdetect import detect
 from pynput import keyboard
@@ -32,6 +34,15 @@ def normalize_name(name):
     # Lowercase, remove non-alphanumeric, and collapse whitespace
     name = re.sub(r'[^a-z0-9]+', ' ', name.lower()).strip()
     return name
+
+
+async def list_voices():
+    """List all available Edge TTS voices."""
+    print("🗣️ Available Edge TTS Voices:")
+    voices = await edge_tts.list_voices()
+    voices = sorted(voices, key=lambda voice: voice["ShortName"])
+    for voice in voices:
+        print(f"  - {voice['ShortName']}: {voice['Gender']}, {voice['Locale']}")
 
 
 def interactive_subtitle_selection(scored_srt_files):
@@ -109,38 +120,69 @@ def play_tts_audio(filename):
         print(f"⚠️ Failed to play TTS audio: {e}")
 
 
-def generate_tts(subs, lang, temp_dir, pre_cache, voice_speed=1.0):
+def generate_tts(subs, lang, temp_dir, pre_cache, voice_speed=1.0, tts_engine='google', voice='en-US-AriaNeural'):
     """Generate TTS files with configurable speed"""
     audio_files = [None] * len(subs)
 
-    if pre_cache:
-        print("🗣️ Pre-generating TTS for all subtitles...")
-        total = len(subs)
-        for i, sub in enumerate(subs, 1):
-            if stop_flag.is_set():
-                break
+    if tts_engine == 'edge':
+        # Edge TTS uses a different speed format (+x% or -x%)
+        rate_str = f"{int((voice_speed - 1) * 100):+}%"
 
-            text = sub.text.replace("\n", " ").strip()
-            if not text:  # Skip empty subtitles
-                continue
+        async def generate_all_edge():
+            total = len(subs)
+            print(f"🗣️ Pre-generating Edge TTS for all subtitles with voice '{voice}'...")
 
-            filename = os.path.join(temp_dir, f"sub_{i}.mp3")
-            if not os.path.exists(filename):
-                try:
-                    tts = gTTS(text=text, lang=lang, slow=(voice_speed < 1.0))
-                    tts.save(filename)
-                except Exception as e:
-                    print(f"\n⚠️ Failed to generate TTS for sub {i}: {e}")
+            tasks = []
+            for i, sub in enumerate(subs):
+                text = sub.text.replace("\n", " ").strip()
+                if not text:
                     continue
-            audio_files[i - 1] = filename
-            progress = int((i / total) * 100)
-            print(f"\r🔄 Generating audio {i}/{total} ({progress}%)", end="", flush=True)
-        print("\n✅ All subtitles cached as audio files.")
-    else:
-        print("⚡ On-demand TTS mode (fast startup, may lag when seeking).")
+                filename = os.path.join(temp_dir, f"sub_{i+1}.mp3")
+                if not os.path.exists(filename):
+                    communicate = edge_tts.Communicate(text, voice, rate=rate_str)
+                    tasks.append((communicate.save(filename), i))
+
+            for i, task_tuple in enumerate(asyncio.as_completed([t[0] for t in tasks])):
+                await task_tuple
+                original_index = tasks[i][1]
+                audio_files[original_index] = os.path.join(temp_dir, f"sub_{original_index+1}.mp3")
+                progress = int(((i + 1) / total) * 100)
+                print(f"\r🔄 Generating audio {i+1}/{total} ({progress}%) ", end="", flush=True)
+
+        if pre_cache:
+            asyncio.run(generate_all_edge())
+            print("\n✅ All subtitles cached as audio files.")
+        else:
+            print("⚡ On-demand Edge TTS mode.")
+
+    elif tts_engine == 'google':
+        if pre_cache:
+            print("🗣️ Pre-generating Google TTS for all subtitles...")
+            total = len(subs)
+            for i, sub in enumerate(subs, 1):
+                if stop_flag.is_set():
+                    break
+
+                text = sub.text.replace("\n", " ").strip()
+                if not text:
+                    continue
+
+                filename = os.path.join(temp_dir, f"sub_{i}.mp3")
+                if not os.path.exists(filename):
+                    try:
+                        tts = gTTS(text=text, lang=lang, slow=(voice_speed < 1.0))
+                        tts.save(filename)
+                    except Exception as e:
+                        print(f"\n⚠️ Failed to generate TTS for sub {i}: {e}")
+                        continue
+                audio_files[i - 1] = filename
+                progress = int((i / total) * 100)
+                print(f"\r🔄 Generating audio {i}/{total} ({progress}%) ", end="", flush=True)
+            print("\n✅ All subtitles cached as audio files.")
+        else:
+            print("⚡ On-demand Google TTS mode.")
 
     return audio_files
-
 
 def cleanup_temp_files(temp_dir):
     """Clean up temporary files"""
@@ -151,8 +193,9 @@ def cleanup_temp_files(temp_dir):
         print(f"⚠️ Could not clean up temp files: {e}")
 
 
-def play_video_with_tts(video_path, srt_path, pre_cache, voice_speed=1.0):
+def play_video_with_tts(video_path, srt_path, pre_cache, voice_speed=1.0, tts_engine='google', voice='en-US-AriaNeural'):
     global current_tts_thread
+
 
     # Validate video file exists
     if not os.path.exists(video_path):
@@ -244,7 +287,7 @@ def play_video_with_tts(video_path, srt_path, pre_cache, voice_speed=1.0):
         audio_files = []
         if subs:
             # Pre-cache (or not)
-            audio_files = generate_tts(subs, lang, temp_dir, pre_cache, voice_speed)
+            audio_files = generate_tts(subs, lang, temp_dir, pre_cache, voice_speed, tts_engine, voice)
             if stop_flag.is_set():
                 return
 
@@ -310,8 +353,14 @@ def play_video_with_tts(video_path, srt_path, pre_cache, voice_speed=1.0):
 
                                     filename = os.path.join(temp_dir, f"sub_{i+1}.mp3")
                                     try:
-                                        tts = gTTS(text=text, lang=lang, slow=(voice_speed < 1.0))
-                                        tts.save(filename)
+                                        if tts_engine == 'edge':
+                                            rate_str = f"{int((voice_speed - 1) * 100):+}%"
+                                            communicate = edge_tts.Communicate(text, voice, rate=rate_str)
+                                            asyncio.run(communicate.save(filename))
+                                        else: # google
+                                            tts = gTTS(text=text, lang=lang, slow=(voice_speed < 1.0))
+                                            tts.save(filename)
+
                                         audio_files[i] = filename
                                     except Exception as e:
                                         print(f"\n⚠️ Failed to generate TTS on-demand: {e}")
@@ -357,18 +406,31 @@ def play_video_with_tts(video_path, srt_path, pre_cache, voice_speed=1.0):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="🎬 Movie dubbing with subtitles + Google TTS (MPV version)")
-    parser.add_argument("movie", help="Path to the movie file")
+    parser = argparse.ArgumentParser(description="🎬 Movie dubbing with subtitles + TTS (MPV version)")
+    parser.add_argument("movie", nargs='?', default=None, help="Path to the movie file")
     parser.add_argument("--subs", help="Path to subtitle file (.srt). If not provided, it will look for a .srt file with the same name as the movie.")
     parser.add_argument("--precache", action="store_true",
-                       help="Pre-generate all TTS (slower startup, instant rewind)")
+                        help="Pre-generate all TTS (slower startup, instant rewind)")
     parser.add_argument("--speed", type=float, default=1.0,
-                       help="TTS voice speed (0.5-2.0, default: 1.0)")
+                        help="TTS voice speed (0.5-2.0 for Google, +/-%% for Edge)")
+    parser.add_argument("--tts-engine", choices=['google', 'edge'], default='google',
+                        help="Select the TTS engine")
+    parser.add_argument("--voice", default="en-US-AriaNeural",
+                        help="Specify the voice for Edge TTS")
+    parser.add_argument("--list-voices", action="store_true",
+                        help="List available Edge TTS voices and exit")
 
     args = parser.parse_args()
 
-    if args.speed < 0.5 or args.speed > 2.0:
-        print("⚠️ Speed must be between 0.5 and 2.0")
+    if args.list_voices:
+        asyncio.run(list_voices())
+        exit(0)
+
+    if not args.movie:
+        parser.error("the following arguments are required: movie")
+
+    if args.tts_engine == 'google' and (args.speed < 0.5 or args.speed > 2.0):
+        print("⚠️ Google TTS speed must be between 0.5 and 2.0")
         exit(1)
 
-    play_video_with_tts(args.movie, args.subs, args.precache, args.speed)
+    play_video_with_tts(args.movie, args.subs, args.precache, args.speed, args.tts_engine, args.voice)
