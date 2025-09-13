@@ -38,27 +38,38 @@ def interactive_subtitle_selection(scored_srt_files):
     """An interactive menu to select a subtitle file."""
     selected_index = 0
 
+    # Add "None" option
+    options = scored_srt_files + [("None of the above (play without subtitles)", 0)]
+
     while True:
         # Clear console and print menu
         os.system('cls' if os.name == 'nt' else 'clear')
         print("📖 Multiple subtitle files found. Use arrow keys to select, Enter to confirm.")
 
-        for i, (filename, score) in enumerate(scored_srt_files):
-            recommendation = "(best match)" if i == 0 else ""
-            prefix = "> " if i == selected_index else "  "
-            print(f"{prefix}{i+1}: {filename} (score: {score:.2f}) {recommendation}")
+        for i, (filename, score) in enumerate(options):
+            if "None of the above" in filename:
+                print("-" * 30) # Separator
+                prefix = "> " if i == selected_index else "  "
+                print(f"{prefix}{filename}")
+            else:
+                recommendation = "(best match)" if i == 0 else ""
+                prefix = "> " if i == selected_index else "  "
+                print(f"{prefix}{i+1}: {filename} (score: {score:.2f}) {recommendation}")
 
         key = readchar.readkey()
 
         if key == readchar.key.UP:
-            selected_index = (selected_index - 1) % len(scored_srt_files)
+            selected_index = (selected_index - 1) % len(options)
         elif key == readchar.key.DOWN:
-            selected_index = (selected_index + 1) % len(scored_srt_files)
+            selected_index = (selected_index + 1) % len(options)
         elif key == readchar.key.ENTER:
-            return scored_srt_files[selected_index][0]
+            chosen_file, _ = options[selected_index]
+            if "None of the above" in chosen_file:
+                return None
+            return chosen_file
         elif key in ('q', 'Q', readchar.key.CTRL_C):
             print("❌ Selection cancelled. Exiting.")
-            return None
+            return "CANCEL"
 
 
 def control_loop():
@@ -180,57 +191,62 @@ def play_video_with_tts(video_path, srt_path, pre_cache, voice_speed=1.0):
             scored_srt_files.sort(key=lambda x: x[1], reverse=True)
 
             chosen_file = interactive_subtitle_selection(scored_srt_files)
-            if chosen_file:
+
+            if chosen_file == "CANCEL":
+                return # Exit if selection was cancelled
+            elif chosen_file is None:
+                srt_path = None
+                print("✅ Playing video without subtitles as requested.")
+            else:
                 srt_path = os.path.join(video_dir, chosen_file)
                 print(f"✅ You selected: {srt_path}")
-            else:
-                return  # Exit if no file was selected
 
-    # Validate subtitle file exists
-    if not os.path.exists(srt_path):
-        print(f"❌ Subtitle file not found: {srt_path}")
-        return
+    # --- Subtitle-dependent section ---
+    subs = None
+    if srt_path:
+        if not os.path.exists(srt_path):
+            print(f"❌ Subtitle file not found: {srt_path}")
+            return
 
-    # Load subtitles
-    try:
-        subs = pysrt.open(srt_path, encoding='utf-8')
-    except Exception as e:
-        print(f"❌ Failed to load subtitles: {e}")
-        return
+        try:
+            subs = pysrt.open(srt_path, encoding='utf-8')
+            if not subs:
+                print("❌ No subtitles found in file")
+                return
+            print(f"📄 Loaded {len(subs)} subtitles")
+        except Exception as e:
+            print(f"❌ Failed to load subtitles: {e}")
+            return
 
-    if not subs:
-        print("❌ No subtitles found in file")
-        return
+        # Detect language
+        sample_text = " ".join(sub.text for sub in subs[:min(10, len(subs))])
+        try:
+            lang = detect(sample_text)
+            print(f"🌍 Detected subtitle language: {lang}")
+        except Exception as e:
+            print(f"⚠️ Language detection failed, defaulting to 'en': {e}")
+            lang = 'en'
 
-    print(f"📄 Loaded {len(subs)} subtitles")
-
-    # Detect language
-    sample_text = " ".join(sub.text for sub in subs[:min(10, len(subs))])
-    try:
-        lang = detect(sample_text)
-        print(f"🌍 Detected subtitle language: {lang}")
-    except Exception as e:
-        print(f"⚠️ Language detection failed, defaulting to 'en': {e}")
-        lang = 'en'
-
-    # Initialize pygame for audio
-    try:
-        pygame.mixer.init()
-        print("🔊 Audio system initialized")
-    except Exception as e:
-        print(f"❌ Failed to initialize audio: {e}")
-        return
+    # Initialize pygame for audio only if subs are loaded
+    if subs:
+        try:
+            pygame.mixer.init()
+            print("🔊 Audio system initialized")
+        except Exception as e:
+            print(f"❌ Failed to initialize audio: {e}")
+            return
 
     # Temp folder for generated TTS
     temp_dir = tempfile.mkdtemp(prefix='movie_dub_')
     print(f"📁 Using temp directory: {temp_dir}")
 
     try:
-        # Pre-cache (or not)
-        audio_files = generate_tts(subs, lang, temp_dir, pre_cache, voice_speed)
-
-        if stop_flag.is_set():
-            return
+        audio_files = []
+        if subs:
+            # Pre-cache (or not)
+            audio_files = generate_tts(subs, lang, temp_dir, pre_cache, voice_speed)
+            if stop_flag.is_set():
+                return
 
         # Setup MPV
         print("🎬 Initializing MPV...")
@@ -249,13 +265,17 @@ def play_video_with_tts(video_path, srt_path, pre_cache, voice_speed=1.0):
         # Start keyboard control in separate thread
         threading.Thread(target=control_loop, daemon=True).start()
 
-        print("🔊 Speaking subtitles with Google TTS in sync with video...")
-        print("📝 Subtitles should also display on screen")
+        if subs:
+            print("🔊 Speaking subtitles with Google TTS in sync with video...")
+            print("📝 Subtitles should also display on screen")
+        else:
+            print("▶️ Playing video without dubbing.")
+
         print("🎮 Controls:")
         print("   space = pause/resume (MPV native)")
         print("   s = stop script")
         print("   q = quit")
-        print("   m = mute/unmute TTS")
+        if subs: print("   m = mute/unmute TTS")
         print("   ←/→ = seek (MPV native)")
         print("   +/- = volume (MPV native)")
         print("   v = toggle subtitle visibility (MPV native)")
@@ -265,55 +285,59 @@ def play_video_with_tts(video_path, srt_path, pre_cache, voice_speed=1.0):
         last_index = -1  # last spoken subtitle
 
         while not stop_flag.is_set() and not player.eof_reached:
-            try:
-                # Get current playback position
-                current_time = player.time_pos
-                if current_time is None:
+            if subs:
+                try:
+                    # Get current playback position
+                    current_time = player.time_pos
+                    if current_time is None:
+                        time.sleep(0.05)
+                        continue
+
+                    current_time_ms = int(current_time * 1000)  # Convert to milliseconds
+
+                    # Find which subtitle matches current video time
+                    for i, sub in enumerate(subs):
+                        if sub.start.ordinal <= current_time_ms <= sub.end.ordinal:
+                            if i != last_index:
+                                filename = audio_files[i]
+
+                                # Generate on-demand if needed
+                                if filename is None:
+                                    text = sub.text.replace("\n", " ").strip()
+                                    if not text:
+                                        last_index = i
+                                        break
+
+                                    filename = os.path.join(temp_dir, f"sub_{i+1}.mp3")
+                                    try:
+                                        tts = gTTS(text=text, lang=lang, slow=(voice_speed < 1.0))
+                                        tts.save(filename)
+                                        audio_files[i] = filename
+                                    except Exception as e:
+                                        print(f"\n⚠️ Failed to generate TTS on-demand: {e}")
+                                        last_index = i
+                                        break
+
+                                # Play TTS audio
+                                with tts_lock:
+                                    pygame.mixer.music.stop()  # Stop previous TTS
+                                    play_tts_audio(filename)
+
+                                # Show current subtitle
+                                print(f"\r🎬 [{i+1}/{len(subs)}] {sub.text[:50]}{'...' if len(sub.text) > 50 else ''}",
+                                      end="", flush=True)
+
+                                last_index = i
+                            break
+
                     time.sleep(0.05)
-                    continue
 
-                current_time_ms = int(current_time * 1000)  # Convert to milliseconds
-
-                # Find which subtitle matches current video time
-                for i, sub in enumerate(subs):
-                    if sub.start.ordinal <= current_time_ms <= sub.end.ordinal:
-                        if i != last_index:
-                            filename = audio_files[i]
-
-                            # Generate on-demand if needed
-                            if filename is None:
-                                text = sub.text.replace("\n", " ").strip()
-                                if not text:
-                                    last_index = i
-                                    break
-
-                                filename = os.path.join(temp_dir, f"sub_{i+1}.mp3")
-                                try:
-                                    tts = gTTS(text=text, lang=lang, slow=(voice_speed < 1.0))
-                                    tts.save(filename)
-                                    audio_files[i] = filename
-                                except Exception as e:
-                                    print(f"\n⚠️ Failed to generate TTS on-demand: {e}")
-                                    last_index = i
-                                    break
-
-                            # Play TTS audio
-                            with tts_lock:
-                                pygame.mixer.music.stop()  # Stop previous TTS
-                                play_tts_audio(filename)
-
-                            # Show current subtitle
-                            print(f"\r🎬 [{i+1}/{len(subs)}] {sub.text[:50]}{'...' if len(sub.text) > 50 else ''}",
-                                  end="", flush=True)
-
-                            last_index = i
-                        break
-
-                time.sleep(0.05)
-
-            except Exception as e:
-                if "property unavailable" not in str(e):
-                    print(f"\n⚠️ Playback error: {e}")
+                except Exception as e:
+                    if "property unavailable" not in str(e):
+                        print(f"\n⚠️ Playback error: {e}")
+                    time.sleep(0.1)
+            else:
+                # If no subs, just wait
                 time.sleep(0.1)
 
     except KeyboardInterrupt:
@@ -323,7 +347,8 @@ def play_video_with_tts(video_path, srt_path, pre_cache, voice_speed=1.0):
     finally:
         stop_flag.set()
         try:
-            pygame.mixer.quit()
+            if subs:
+                pygame.mixer.quit()
             if 'player' in locals():
                 player.terminate()
         except:
