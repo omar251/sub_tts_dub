@@ -40,21 +40,29 @@ pip install -e .
 
 ### Basic Usage
 
+The script will automatically look for a `.srt` subtitle file with the same name as the movie file in the same directory.
+
 ```bash
-python dub.py --movie "path/to/movie.mp4" --subs "path/to/subtitles.srt"
+python dub.py "path/to/movie.mp4"
 ```
 
 ### Advanced Options
 
+You can also specify a path to a different subtitle file.
+
+```bash
+python dub.py "path/to/movie.mp4" --subs "path/to/different_subtitles.srt"
+```
+
 ```bash
 # Pre-cache all TTS audio (slower startup, instant seeking)
-python dub.py --movie "movie.mp4" --subs "subs.srt" --precache
+python dub.py "movie.mp4" --precache
 
 # Adjust voice speed (0.5 = slower, 2.0 = faster)
-python dub.py --movie "movie.mp4" --subs "subs.srt" --speed 1.5
+python dub.py "movie.mp4" --speed 1.5
 
 # Combine options
-python dub.py --movie "movie.mp4" --subs "subs.srt" --precache --speed 0.8
+python dub.py "movie.mp4" --subs "subs.srt" --precache --speed 0.8
 ```
 
 ## Playback Modes

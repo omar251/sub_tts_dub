@@ -6,6 +6,10 @@ import tempfile
 import threading
 import argparse
 import shutil
+import difflib
+import re
+import unicodedata
+import readchar
 import pygame
 from gtts import gTTS
 from langdetect import detect
@@ -16,6 +20,45 @@ stop_flag = threading.Event()
 pause_flag = threading.Event()
 current_tts_thread = None
 tts_lock = threading.Lock()
+
+
+def normalize_name(name):
+    """Normalize string for better matching."""
+    # Remove potential prefixes like 'cmovies-' or 'www.website.com-'
+    name = re.sub(r'^\w+[-_.]', '', name)
+    # Remove accents (diacritics)
+    nfkd_form = unicodedata.normalize('NFKD', name)
+    name = "".join([c for c in nfkd_form if not unicodedata.combining(c)])
+    # Lowercase, remove non-alphanumeric, and collapse whitespace
+    name = re.sub(r'[^a-z0-9]+', ' ', name.lower()).strip()
+    return name
+
+
+def interactive_subtitle_selection(scored_srt_files):
+    """An interactive menu to select a subtitle file."""
+    selected_index = 0
+
+    while True:
+        # Clear console and print menu
+        os.system('cls' if os.name == 'nt' else 'clear')
+        print("📖 Multiple subtitle files found. Use arrow keys to select, Enter to confirm.")
+
+        for i, (filename, score) in enumerate(scored_srt_files):
+            recommendation = "(best match)" if i == 0 else ""
+            prefix = "> " if i == selected_index else "  "
+            print(f"{prefix}{i+1}: {filename} (score: {score:.2f}) {recommendation}")
+
+        key = readchar.readkey()
+
+        if key == readchar.key.UP:
+            selected_index = (selected_index - 1) % len(scored_srt_files)
+        elif key == readchar.key.DOWN:
+            selected_index = (selected_index + 1) % len(scored_srt_files)
+        elif key == readchar.key.ENTER:
+            return scored_srt_files[selected_index][0]
+        elif key in ('q', 'Q', readchar.key.CTRL_C):
+            print("❌ Selection cancelled. Exiting.")
+            return None
 
 
 def control_loop():
@@ -100,11 +143,50 @@ def cleanup_temp_files(temp_dir):
 def play_video_with_tts(video_path, srt_path, pre_cache, voice_speed=1.0):
     global current_tts_thread
 
-    # Validate files exist
+    # Validate video file exists
     if not os.path.exists(video_path):
         print(f"❌ Video file not found: {video_path}")
         return
 
+    # If srt_path is not provided, search for it
+    if not srt_path:
+        print("🔍 Subtitle file not specified, searching for one...")
+        video_dir = os.path.dirname(video_path)
+        if not video_dir:
+            video_dir = "."
+
+        srt_files = [f for f in os.listdir(video_dir) if f.lower().endswith('.srt')]
+
+        if not srt_files:
+            print(f"❌ No .srt files found in the directory: {video_dir}")
+            return
+
+        if len(srt_files) == 1:
+            srt_path = os.path.join(video_dir, srt_files[0])
+            print(f"✅ Automatically selected the only subtitle file found: {srt_path}")
+        else:
+            movie_base_name, _ = os.path.splitext(os.path.basename(video_path))
+            normalized_movie_name = normalize_name(movie_base_name)
+
+            # Score and sort subtitles
+            scored_srt_files = []
+            for srt_filename in srt_files:
+                srt_base_name, _ = os.path.splitext(srt_filename)
+                normalized_srt_name = normalize_name(srt_base_name)
+                score = difflib.SequenceMatcher(None, normalized_movie_name, normalized_srt_name).ratio()
+                scored_srt_files.append((srt_filename, score))
+
+            # Sort by score, descending
+            scored_srt_files.sort(key=lambda x: x[1], reverse=True)
+
+            chosen_file = interactive_subtitle_selection(scored_srt_files)
+            if chosen_file:
+                srt_path = os.path.join(video_dir, chosen_file)
+                print(f"✅ You selected: {srt_path}")
+            else:
+                return  # Exit if no file was selected
+
+    # Validate subtitle file exists
     if not os.path.exists(srt_path):
         print(f"❌ Subtitle file not found: {srt_path}")
         return
@@ -251,8 +333,8 @@ def play_video_with_tts(video_path, srt_path, pre_cache, voice_speed=1.0):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="🎬 Movie dubbing with subtitles + Google TTS (MPV version)")
-    parser.add_argument("--movie", required=True, help="Path to movie file")
-    parser.add_argument("--subs", required=True, help="Path to subtitle file (.srt)")
+    parser.add_argument("movie", help="Path to the movie file")
+    parser.add_argument("--subs", help="Path to subtitle file (.srt). If not provided, it will look for a .srt file with the same name as the movie.")
     parser.add_argument("--precache", action="store_true",
                        help="Pre-generate all TTS (slower startup, instant rewind)")
     parser.add_argument("--speed", type=float, default=1.0,

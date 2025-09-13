@@ -3084,6 +3084,15 @@ wheels = [
 ]
 
 [[package]]
+name = "readchar"
+version = "4.2.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/dd/f8/8657b8cbb4ebeabfbdf991ac40eca8a1d1bd012011bd44ad1ed10f5cb494/readchar-4.2.1.tar.gz", hash = "sha256:91ce3faf07688de14d800592951e5575e9c7a3213738ed01d394dcc949b79adb", size = 9685, upload-time = "2024-11-04T18:28:07.757Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/a9/10/e4b1e0e5b6b6745c8098c275b69bc9d73e9542d5c7da4f137542b499ed44/readchar-4.2.1-py3-none-any.whl", hash = "sha256:a769305cd3994bb5fa2764aa4073452dc105a4ec39068ffe6efd3c20c60acc77", size = 9350, upload-time = "2024-11-04T18:28:02.859Z" },
+]
+
+[[package]]
 name = "rebulk"
 version = "3.2.0"
 source = { registry = "https://pypi.org/simple" }
@@ -3141,6 +3150,45 @@ wheels = [
 ]
 
 [[package]]
+name = "sub-tts-dub"
+version = "0.1.0"
+source = { virtual = "." }
+dependencies = [
+    { name = "babelfish" },
+    { name = "beautifulsoup4" },
+    { name = "gtts" },
+    { name = "keyboard" },
+    { name = "langdetect" },
+    { name = "mpv" },
+    { name = "pygame" },
+    { name = "pynput" },
+    { name = "pysrt" },
+    { name = "python-vlc" },
+    { name = "pyttsx3" },
+    { name = "readchar" },
+    { name = "requests" },
+    { name = "subliminal" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "babelfish", specifier = ">=0.6.1" },
+    { name = "beautifulsoup4", specifier = ">=4.13.5" },
+    { name = "gtts", specifier = ">=2.5.4" },
+    { name = "keyboard", specifier = ">=0.13.5" },
+    { name = "langdetect", specifier = ">=1.0.9" },
+    { name = "mpv", specifier = ">=1.0.8" },
+    { name = "pygame", specifier = ">=2.6.1" },
+    { name = "pynput", specifier = ">=1.8.1" },
+    { name = "pysrt", specifier = ">=1.1.2" },
+    { name = "python-vlc", specifier = ">=3.0.21203" },
+    { name = "pyttsx3", specifier = ">=2.99" },
+    { name = "readchar", specifier = ">=4.0.6" },
+    { name = "requests", specifier = ">=2.32.5" },
+    { name = "subliminal", specifier = ">=2.4.0" },
+]
+
+[[package]]
 name = "subliminal"
 version = "2.4.0"
 source = { registry = "https://pypi.org/simple" }
@@ -3164,43 +3212,6 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/f9/d1/f55d55bf7d585f6d749b60479b4f405de0d8805324d83c598ee3d540df79/subliminal-2.4.0.tar.gz", hash = "sha256:73df6d1940166ef0e2cdeb4f8d655a4afe1082d481ec090ad2a9e66b1a1621fc", size = 3460114, upload-time = "2025-09-02T23:23:33.442Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/db/3b/f14266a7c844944c6505398aca7bfbab257b1908d71d3aae12b1dce65994/subliminal-2.4.0-py3-none-any.whl", hash = "sha256:25c91671d96bb1db9484ff2e5cecd748e262119691b87b8cf24d880879a813d0", size = 113602, upload-time = "2025-09-02T23:23:31.738Z" },
-]
-
-[[package]]
-name = "temp"
-version = "0.1.0"
-source = { virtual = "." }
-dependencies = [
-    { name = "babelfish" },
-    { name = "beautifulsoup4" },
-    { name = "gtts" },
-    { name = "keyboard" },
-    { name = "langdetect" },
-    { name = "mpv" },
-    { name = "pygame" },
-    { name = "pynput" },
-    { name = "pysrt" },
-    { name = "python-vlc" },
-    { name = "pyttsx3" },
-    { name = "requests" },
-    { name = "subliminal" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "babelfish", specifier = ">=0.6.1" },
-    { name = "beautifulsoup4", specifier = ">=4.13.5" },
-    { name = "gtts", specifier = ">=2.5.4" },
-    { name = "keyboard", specifier = ">=0.13.5" },
-    { name = "langdetect", specifier = ">=1.0.9" },
-    { name = "mpv", specifier = ">=1.0.8" },
-    { name = "pygame", specifier = ">=2.6.1" },
-    { name = "pynput", specifier = ">=1.8.1" },
-    { name = "pysrt", specifier = ">=1.1.2" },
-    { name = "python-vlc", specifier = ">=3.0.21203" },
-    { name = "pyttsx3", specifier = ">=2.99" },
-    { name = "requests", specifier = ">=2.32.5" },
-    { name = "subliminal", specifier = ">=2.4.0" },
 ]
 
 [[package]]
